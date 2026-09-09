@@ -14,17 +14,19 @@ import { DailyLog } from '../types';
 import { soundFx } from '../utils/audio';
 
 export const DailyLogSection: React.FC = () => {
-  const { dailyLogs, currentUser, setIsAdminOpen } = useApp();
+  const { dailyLogs = [], currentUser, setIsAdminOpen } = useApp();
   const [selectedTag, setSelectedTag] = useState<string>('ALL');
+
+  const safeLogs = Array.isArray(dailyLogs) ? dailyLogs : [];
 
   // Extract all unique tags
   const allTags = Array.from(
-    new Set(dailyLogs.flatMap((l) => l.tags || []))
+    new Set(safeLogs.flatMap((l) => l.tags || []))
   );
 
-  const filteredLogs = dailyLogs.filter((log) => {
+  const filteredLogs = safeLogs.filter((log) => {
     if (selectedTag === 'ALL') return true;
-    return log.tags.includes(selectedTag);
+    return log.tags?.includes(selectedTag);
   });
 
   return (
@@ -43,18 +45,18 @@ export const DailyLogSection: React.FC = () => {
           </p>
         </div>
 
-        {currentUser?.role === 'admin' && (
-          <button
-            onClick={() => {
-              soundFx.playKeyClick();
-              setIsAdminOpen(true);
-            }}
-            className="mt-4 md:mt-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-950/20 text-amber-300 hover:bg-amber-950/40 text-xs font-mono transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>ADD NEW LOG ENTRY</span>
-          </button>
-        )}
+        <button
+          id="btn-add-log-admin"
+          onClick={() => {
+            soundFx.playKeyClick();
+            setIsAdminOpen(true);
+          }}
+          className="mt-4 md:mt-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-950/30 text-amber-300 hover:bg-amber-950/60 text-xs font-mono transition-colors cursor-pointer"
+          title="Open Admin Dashboard to add new research log"
+        >
+          <Plus className="w-3.5 h-3.5 text-amber-400" />
+          <span>ADD NEW LOG ENTRY</span>
+        </button>
       </div>
 
       {/* Tag Filters */}
@@ -70,7 +72,7 @@ export const DailyLogSection: React.FC = () => {
               : 'border-zinc-800/80 bg-zinc-900/40 text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          ALL LOGS ({dailyLogs.length})
+          ALL LOGS ({safeLogs.length})
         </button>
         {allTags.map((tag) => (
           <button

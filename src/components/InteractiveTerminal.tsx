@@ -15,12 +15,16 @@ export const InteractiveTerminal: React.FC = () => {
     setIsTerminalOpen,
     liveStatus,
     siteSettings,
-    projects,
-    writeUps,
-    skills,
+    projects = [],
+    writeUps = [],
+    skills = [],
     setActiveSection,
     setIsAdminOpen,
   } = useApp();
+
+  const safeProjects = Array.isArray(projects) ? projects : [];
+  const safeWriteUps = Array.isArray(writeUps) ? writeUps : [];
+  const safeSkills = Array.isArray(skills) ? skills : [];
 
   const [lines, setLines] = useState<TerminalLine[]>([
     { id: '1', type: 'system', text: 'RAM.SEC Core Terminal v4.2.0-sec (x86_64-pc-linux-gnu)' },
@@ -85,11 +89,12 @@ export const InteractiveTerminal: React.FC = () => {
   contact     Get encrypted contact endpoints and social coordinates
   status      Display real-time SOC system metrics and threat status
   whoami      Display active session credentials
+  admin       Open Admin CMS Control Center & Telemetry Editor
   clear       Flush terminal buffer
   date        Display current system time
   exit        Close interactive console session
   
-Special commands: cat mission.txt, systemctl status security, sudo su`
+Special commands: cat mission.txt, systemctl status security, admin, sudo su`
         );
         break;
 
@@ -149,7 +154,7 @@ CURRENT FOCUS : ${liveStatus.currentFocus}`);
       case 'skills':
         setActiveSection('arsenal');
         document.getElementById('arsenal')?.scrollIntoView({ behavior: 'smooth' });
-        addOutput(`Top Competencies (${skills.length} tools registered):
+        addOutput(`Top Competencies (${safeSkills.length} tools registered):
 - Penetration Testing & Web Application Security (Expert)
 - Linux Kernel Hardening & eBPF Networking (Advanced)
 - Python Security Scripting & Exploit PoC Automation
@@ -160,14 +165,14 @@ CURRENT FOCUS : ${liveStatus.currentFocus}`);
         setActiveSection('projects');
         document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' });
         addOutput(`Active Security Projects:
-${projects.map((p) => `* [${p.status}] ${p.name} - ${p.category}`).join('\n')}`);
+${safeProjects.map((p) => `* [${p.status}] ${p.name} - ${p.category}`).join('\n')}`);
         break;
 
       case 'writeups':
         setActiveSection('writeups');
         document.getElementById('writeups')?.scrollIntoView({ behavior: 'smooth' });
         addOutput(`Research Write-ups:
-${writeUps.map((w) => `* [${w.difficulty}] ${w.title} (${w.readingTime})`).join('\n')}`);
+${safeWriteUps.map((w) => `* [${w.difficulty}] ${w.title} (${w.readingTime})`).join('\n')}`);
         break;
 
       case 'logs':
@@ -194,13 +199,18 @@ NOTICE: All tools and environments strictly intended for authorized educational 
 "Available for cybersecurity projects, collaboration and security research."`);
         break;
 
+      case 'admin':
+      case 'cms':
+      case 'dashboard':
+      case 'control':
+        addOutput(`[AUTH] Admin privileged access confirmed. Launching Admin CMS Dashboard...`);
+        setIsAdminOpen(true);
+        break;
+
+      case 'su':
       case 'sudo':
-        if (arg.includes('su') || arg.includes('admin')) {
-          addOutput(`[AUTH] Root challenge initiated. Launching Admin CMS authorization prompt...`);
-          setIsAdminOpen(true);
-        } else {
-          addOutput(`ram is in the sudoers file. This incident has been logged.`, 'error');
-        }
+        addOutput(`[AUTH] Superuser privileged access confirmed. Launching Admin CMS Dashboard...`);
+        setIsAdminOpen(true);
         break;
 
       case 'clear':

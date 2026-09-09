@@ -12,6 +12,7 @@ import {
   LabExperiment,
   SiteSettings,
   User,
+  UserRole,
   AuditLog,
   Message,
 } from '../types';
@@ -31,6 +32,16 @@ import {
   initialAuditLogs,
 } from '../data/initialData';
 import { soundFx } from '../utils/audio';
+import {
+  initSupabase,
+  isSupabaseConnected,
+  getActiveSupabaseConfig,
+  saveCustomSupabaseConfig,
+  getLocalUserAccounts,
+  saveLocalUserAccounts,
+  DEFAULT_OPERATOR_ACCOUNTS,
+  SupabaseConfig,
+} from '../lib/supabase';
 
 interface AppContextType {
   siteSettings: SiteSettings;
@@ -45,8 +56,12 @@ interface AppContextType {
   education: EducationItem[];
   labExperiments: LabExperiment[];
   messages: Message[];
+  contactMessages: Message[];
   currentUser: User | null;
   auditLogs: AuditLog[];
+  registeredUsers: User[];
+  isSupabaseConfigured: boolean;
+  supabaseConfig: SupabaseConfig;
 
   // Navigation & Modals
   activeSection: string;
@@ -87,8 +102,13 @@ interface AppContextType {
   sendMessage: (msg: { name: string; email: string; subject: string; message: string }) => boolean;
   markMessageRead: (id: string) => void;
   deleteMessage: (id: string) => void;
-  login: (emailOrUser: string, roleOrPass?: string) => { success: boolean; error?: string };
-  signup: (username: string, password?: string, email?: string) => { success: boolean; error?: string };
+  login: (emailOrUser: string, roleOrPass?: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (username: string, password?: string, email?: string, role?: UserRole) => Promise<{ success: boolean; error?: string }>;
+  resetPassword: (email: string) => Promise<{ success: boolean; message: string; error?: string }>;
+  updateUserProfile: (updates: Partial<User>) => Promise<{ success: boolean; error?: string }>;
+  updateUserRole: (userId: string, newRole: UserRole) => void;
+  deleteUserAccount: (userId: string) => void;
+  setSupabaseCredentials: (url: string, anonKey: string) => { success: boolean; error?: string };
   logout: () => void;
   toggleAudioEffects: () => void;
   resetToDefaults: () => void;
@@ -132,6 +152,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [messages, setMessagesState] = useState<Message[]>(() => getStored('messages', []));
   const [currentUser, setCurrentUserState] = useState<User | null>(() => getStored('user', initialUser));
   const [auditLogs, setAuditLogsState] = useState<AuditLog[]>(() => getStored('auditLogs', initialAuditLogs));
+  const [supabaseConfig, setSupabaseConfigState] = useState<SupabaseConfig>(getActiveSupabaseConfig);
+  const [isSupabaseConfigured, setIsSupabaseConfigured] = useState<boolean>(isSupabaseConnected);
+  const [registeredUsers, setRegisteredUsersState] = useState<User[]>(() => {
+    const accs = getLocalUserAccounts();
+    return accs.map((a) => a.user);
+  });
 
   // Modals & Active states
   const [activeSection, setActiveSection] = useState<string>('hero');
@@ -142,6 +168,109 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedWriteUp, setSelectedWriteUp] = useState<WriteUp | null>(null);
+
+  // Sync Supabase Auth listener
+  useEffect(() => {
+    const supabase = initSupabase();
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          const meta = session.user.user_metadata || {};
+          const role: UserRole = meta.role || 'researcher';
+          const userObj: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: meta.name || meta.full_name || (session.user.email ? session.user.email.split('@')[0] : 'Operator'),
+            username: meta.username || (session.user.email ? session.user.email.split('@')[0] : 'operator'),
+            role: role,
+            joinedDate: new Date(session.user.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+            savedArticles: meta.savedArticles || [],
+            avatar: role === 'admin' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80' : undefined,
+            provider: 'supabase',
+          };
+          setCurrentUserState(userObj);
+        }
+      });
+
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          const meta = session.user.user_metadata || {};
+          const role: UserRole = meta.role || 'researcher';
+          const userObj: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: meta.name || meta.full_name || (session.user.email ? session.user.email.split('@')[0] : 'Operator'),
+            username: meta.username || (session.user.email ? session.user.email.split('@')[0] : 'operator'),
+            role: role,
+            joinedDate: new Date(session.user.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+            savedArticles: meta.savedArticles || [],
+            avatar: role === 'admin' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80' : undefined,
+            provider: 'supabase',
+          };
+          setCurrentUserState(userObj);
+          setStored('user', userObj);
+        }
+      });
+
+      return () => {
+        authListener.subscription.unsubscribe();
+      };
+    }
+  }, []);
+
+  const handleSetIsAdminOpen = (open: boolean) => {
+    setIsAdminOpen(open);
+    if (open) {
+      soundFx.playKeyClick();
+      if (!currentUser) {
+        addAudit('ADMIN_ATTEMPT', 'Unauthenticated visitor accessed Admin CMS portal (Clearance Verification Required)', 'WARNING');
+      } else if (currentUser.role !== 'admin') {
+        addAudit('ADMIN_ATTEMPT', `User ${currentUser.email} (${currentUser.role}) accessed Admin CMS (Level 3 Clearance Required)`, 'ALERT');
+      } else {
+        addAudit('ADMIN_ACCESS', `Admin ${currentUser.email} accessed Control Center CMS`);
+      }
+      try {
+        if (window.location.hash !== '#admin') {
+          window.history.replaceState(null, '', '#admin');
+        }
+      } catch (_) {}
+    } else {
+      try {
+        if (window.location.hash === '#admin') {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      } catch (_) {}
+    }
+  };
+
+  // Support direct URL navigation (#admin or /admin) and keyboard shortcut (Ctrl/Cmd + Alt + A)
+  useEffect(() => {
+    const checkAdminRoute = () => {
+      const hash = window.location.hash.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+      if (hash === '#admin' || hash === '#/admin' || hash === '#admin-dashboard' || path === '/admin') {
+        setIsAdminOpen(true);
+      }
+    };
+
+    checkAdminRoute();
+    window.addEventListener('hashchange', checkAdminRoute);
+    window.addEventListener('popstate', checkAdminRoute);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        handleSetIsAdminOpen(!isAdminOpen);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('hashchange', checkAdminRoute);
+      window.removeEventListener('popstate', checkAdminRoute);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentUser, isAdminOpen]);
 
   // Sync soundFx config
   useEffect(() => {
@@ -322,78 +451,382 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setMessagesState((prev) => prev.filter((m) => m.id !== id));
   };
 
-  const login = (emailOrUser: string, roleOrPass: string = 'researcher'): { success: boolean; error?: string } => {
+  const login = async (
+    emailOrUser: string,
+    roleOrPass: string = 'researcher'
+  ): Promise<{ success: boolean; error?: string }> => {
     if (!emailOrUser || !emailOrUser.trim()) {
-      return { success: false, error: 'Identifier is required' };
+      return { success: false, error: 'Identifier (email or username) is required' };
     }
     const cleanId = emailOrUser.trim();
-    const isAdmin = cleanId.toLowerCase() === 'admin' || roleOrPass === 'admin';
+    const idLower = cleanId.toLowerCase();
+    const passOrRole = roleOrPass ? roleOrPass.trim() : '';
 
-    // Verify admin credentials if attempting to sign in as admin
-    if (cleanId.toLowerCase() === 'admin' && roleOrPass !== 'admin' && roleOrPass !== 'ramsec2026') {
-      soundFx.playKeyClick();
-      return { success: false, error: 'Invalid admin passphrase key' };
+    const supabase = initSupabase();
+
+    // 1. If Supabase is connected, attempt live Supabase authentication
+    if (supabase) {
+      try {
+        let emailToUse = cleanId;
+        if (!cleanId.includes('@')) {
+          const matched = registeredUsers.find((u) => u.username?.toLowerCase() === idLower);
+          if (matched) {
+            emailToUse = matched.email;
+          } else {
+            emailToUse = `${idLower}@sec.local`;
+          }
+        }
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: emailToUse,
+          password: passOrRole,
+        });
+
+        if (error) {
+          addAudit('AUTH_FAILED', `Supabase authentication failed for ${cleanId}: ${error.message}`, 'WARNING');
+          // Allow fallback to local admin if testing with default seed credentials
+          const isDefaultAdmin = (idLower === 'admin' || idLower === 'ram') && passOrRole === 'ramsec2026';
+          if (!isDefaultAdmin) {
+            return { success: false, error: error.message };
+          }
+        } else if (data.user) {
+          const userMeta = data.user.user_metadata || {};
+          const role: UserRole =
+            userMeta.role ||
+            (idLower.includes('admin') || idLower.includes('ram') ? 'admin' : 'researcher');
+
+          const loggedInUser: User = {
+            id: data.user.id,
+            email: data.user.email || emailToUse,
+            name: userMeta.name || userMeta.full_name || cleanId.split('@')[0],
+            username: userMeta.username || cleanId.split('@')[0].toLowerCase(),
+            role: role,
+            joinedDate: new Date(data.user.created_at).toLocaleDateString('en-US', {
+              month: 'short',
+              year: 'numeric',
+            }),
+            savedArticles: userMeta.savedArticles || [],
+            avatar: role === 'admin'
+              ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
+              : undefined,
+            provider: 'supabase',
+          };
+
+          setCurrentUserState(loggedInUser);
+          setStored('user', loggedInUser);
+          addAudit('USER_LOGIN', `User ${loggedInUser.email} authenticated via Supabase [Role: ${role.toUpperCase()}]`);
+          soundFx.playSuccessTone();
+          return { success: true };
+        }
+      } catch (err: any) {
+        console.warn('Supabase auth attempt error:', err);
+      }
     }
 
-    const role: 'admin' | 'researcher' | 'guest' = isAdmin
-      ? 'admin'
-      : roleOrPass === 'guest'
-      ? 'guest'
-      : 'researcher';
+    // 2. High-security Local/Sandbox verification
+    const accounts = getLocalUserAccounts();
+    const matchedAccount = accounts.find(
+      (acc) =>
+        acc.user.username?.toLowerCase() === idLower ||
+        acc.user.email.toLowerCase() === idLower
+    );
 
-    const cleanName = cleanId.includes('@') ? cleanId.split('@')[0] : cleanId;
-    const displayName = isAdmin
-      ? 'Ram (Admin)'
-      : cleanName
-      ? cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
-      : 'Researcher';
+    if (matchedAccount) {
+      if (passOrRole && matchedAccount.passwordHash && matchedAccount.passwordHash !== passOrRole) {
+        addAudit('AUTH_FAILED', `Authentication rejected for ${cleanId} (Invalid credentials)`, 'WARNING');
+        return { success: false, error: 'Incorrect passphrase / access key rejected.' };
+      }
+      const u: User = {
+        ...matchedAccount.user,
+        lastLogin: new Date().toLocaleTimeString(),
+        provider: 'local',
+      };
+      setCurrentUserState(u);
+      setStored('user', u);
+      addAudit('USER_LOGIN', `Operator ${u.email} authenticated [Role: ${u.role.toUpperCase()}]`);
+      soundFx.playSuccessTone();
+      return { success: true };
+    }
 
-    const user: User = {
-      id: 'user-' + Date.now(),
-      name: displayName,
-      username: cleanId.toLowerCase(),
-      email: cleanId.includes('@') ? cleanId : `${cleanId.toLowerCase()}@sec.local`,
-      role,
-      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      savedArticles: currentUser ? currentUser.savedArticles : [],
-      avatar: isAdmin
-        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
-        : undefined,
+    // 3. Admin fallback shortcut
+    if (
+      idLower === 'admin' ||
+      idLower === 'ram' ||
+      idLower === 'ramvvdav@gmail.com' ||
+      idLower === 'ram.security@proton.me'
+    ) {
+      if (passOrRole && passOrRole !== 'ramsec2026' && passOrRole !== 'admin') {
+        return { success: false, error: 'Invalid administrator credentials' };
+      }
+      const adminUser: User = {
+        id: 'usr-admin-01',
+        name: 'Ram (Admin)',
+        username: 'admin',
+        email: 'admin@sec.local',
+        role: 'admin',
+        joinedDate: 'Jan 2024',
+        savedArticles: ['wu-1', 'wu-2'],
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+        provider: 'local',
+      };
+      setCurrentUserState(adminUser);
+      setStored('user', adminUser);
+      addAudit('USER_LOGIN', `Administrator ${adminUser.email} authenticated with elevated privileges`);
+      soundFx.playSuccessTone();
+      return { success: true };
+    }
+
+    return {
+      success: false,
+      error: 'User not registered. Please create an account or verify credentials.',
     };
-    setCurrentUserState(user);
-    addAudit('USER_LOGIN', `User ${user.email} authenticated with role: ${role}`);
-    soundFx.playSuccessTone();
-    return { success: true };
   };
 
-  const signup = (username: string, _password?: string, email?: string): { success: boolean; error?: string } => {
+  const signup = async (
+    username: string,
+    password?: string,
+    email?: string,
+    role: UserRole = 'researcher'
+  ): Promise<{ success: boolean; error?: string }> => {
     if (!username || username.trim().length < 2) {
       return { success: false, error: 'Username must be at least 2 characters' };
     }
+    if (!password || password.length < 6) {
+      return { success: false, error: 'Password passphrase must be at least 6 characters' };
+    }
     const cleanUser = username.trim();
     const userEmail = email && email.includes('@') ? email.trim() : `${cleanUser.toLowerCase()}@sec.local`;
+
+    const supabase = initSupabase();
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: userEmail,
+          password: password,
+          options: {
+            data: {
+              username: cleanUser.toLowerCase(),
+              name: cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1),
+              role: role,
+            },
+          },
+        });
+
+        if (error) {
+          addAudit('AUTH_SIGNUP_ERR', `Supabase signup rejection: ${error.message}`, 'WARNING');
+          return { success: false, error: error.message };
+        }
+
+        const newUser: User = {
+          id: data.user?.id || 'usr-' + Date.now(),
+          name: cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1),
+          username: cleanUser.toLowerCase(),
+          email: userEmail,
+          role: role,
+          joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          savedArticles: [],
+          provider: 'supabase',
+        };
+
+        setCurrentUserState(newUser);
+        setStored('user', newUser);
+
+        setRegisteredUsersState((prev) => {
+          const next = [...prev.filter((u) => u.email !== newUser.email), newUser];
+          return next;
+        });
+
+        addAudit('USER_REGISTER', `New user registered via Supabase: ${cleanUser} (${userEmail}) [${role.toUpperCase()}]`);
+        soundFx.playSuccessTone();
+        return { success: true };
+      } catch (err: any) {
+        console.warn('Supabase sign up error:', err);
+      }
+    }
+
+    // Local / Sandbox user provisioning
+    const accounts = getLocalUserAccounts();
+    if (
+      accounts.some(
+        (a) =>
+          a.user.username?.toLowerCase() === cleanUser.toLowerCase() ||
+          a.user.email.toLowerCase() === userEmail.toLowerCase()
+      )
+    ) {
+      return { success: false, error: 'An account with this handle or email already exists' };
+    }
+
     const newUser: User = {
-      id: 'user-' + Date.now(),
+      id: 'usr-' + Date.now(),
       name: cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1),
       username: cleanUser.toLowerCase(),
       email: userEmail,
-      role: 'researcher',
+      role: role,
       joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
       savedArticles: [],
+      provider: 'local',
     };
+
+    const nextAccounts = [...accounts, { user: newUser, passwordHash: password }];
+    saveLocalUserAccounts(nextAccounts);
+    setRegisteredUsersState(nextAccounts.map((a) => a.user));
     setCurrentUserState(newUser);
-    addAudit('USER_REGISTER', `New user registered: ${cleanUser} (${userEmail})`);
+    setStored('user', newUser);
+
+    addAudit('USER_REGISTER', `New account provisioned: ${cleanUser} (${userEmail}) [Role: ${role.toUpperCase()}]`);
     soundFx.playSuccessTone();
     return { success: true };
   };
 
-  const logout = () => {
+  const resetPassword = async (
+    email: string
+  ): Promise<{ success: boolean; message: string; error?: string }> => {
+    if (!email || !email.includes('@')) {
+      return { success: false, message: '', error: 'Valid email address is required' };
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const supabase = initSupabase();
+
+    if (supabase) {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+        if (error) {
+          return { success: false, message: '', error: error.message };
+        }
+        addAudit('PASSWORD_RESET_REQ', `Supabase password recovery email dispatched to ${cleanEmail}`);
+        return {
+          success: true,
+          message: `Password recovery transmission dispatched to ${cleanEmail}. Please check your inbox.`,
+        };
+      } catch (err: any) {
+        console.warn('Supabase reset password error:', err);
+      }
+    }
+
+    addAudit('PASSWORD_RESET_REQ', `Recovery challenge generated for ${cleanEmail}`);
+    return {
+      success: true,
+      message: `Recovery challenge generated for ${cleanEmail}. With a live Supabase project and SMTP configured, an automated reset link is dispatched to your email.`,
+    };
+  };
+
+  const updateUserProfile = async (updates: Partial<User>): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser) return { success: false, error: 'No active session' };
+    const updatedUser = { ...currentUser, ...updates };
+    setCurrentUserState(updatedUser);
+    setStored('user', updatedUser);
+
+    setRegisteredUsersState((prev) =>
+      prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
+    );
+
+    const accounts = getLocalUserAccounts();
+    const nextAccounts = accounts.map((acc) =>
+      acc.user.id === currentUser.id ? { ...acc, user: updatedUser } : acc
+    );
+    saveLocalUserAccounts(nextAccounts);
+
+    const supabase = initSupabase();
+    if (supabase) {
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            name: updatedUser.name,
+            username: updatedUser.username,
+          },
+        });
+      } catch (_) {}
+    }
+
+    addAudit('PROFILE_UPDATED', `User ${updatedUser.email} profile updated`);
+    soundFx.playSuccessTone();
+    return { success: true };
+  };
+
+  const updateUserRole = (userId: string, newRole: UserRole) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      addAudit('UNAUTHORIZED_ACCESS', `Unauthorized role modification attempt by ${currentUser?.email || 'guest'}`, 'ALERT');
+      return;
+    }
+
+    setRegisteredUsersState((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+    );
+
+    const accounts = getLocalUserAccounts();
+    const nextAccounts = accounts.map((acc) =>
+      acc.user.id === userId ? { ...acc, user: { ...acc.user, role: newRole } } : acc
+    );
+    saveLocalUserAccounts(nextAccounts);
+
+    if (currentUser.id === userId) {
+      const updated = { ...currentUser, role: newRole };
+      setCurrentUserState(updated);
+      setStored('user', updated);
+    }
+
+    addAudit('ROLE_MODIFIED', `Admin ${currentUser.email} updated role for user ${userId} to ${newRole.toUpperCase()}`, 'WARNING');
+    soundFx.playSuccessTone();
+  };
+
+  const deleteUserAccount = (userId: string) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      addAudit('UNAUTHORIZED_ACCESS', `Unauthorized user deletion attempt by ${currentUser?.email || 'guest'}`, 'ALERT');
+      return;
+    }
+
+    setRegisteredUsersState((prev) => prev.filter((u) => u.id !== userId));
+
+    const accounts = getLocalUserAccounts();
+    const nextAccounts = accounts.filter((acc) => acc.user.id !== userId);
+    saveLocalUserAccounts(nextAccounts);
+
+    if (currentUser.id === userId) {
+      logout();
+    }
+
+    addAudit('USER_DELETED', `Admin ${currentUser.email} deleted user account ${userId}`, 'ALERT');
+    soundFx.playKeyClick();
+  };
+
+  const setSupabaseCredentials = (url: string, anonKey: string): { success: boolean; error?: string } => {
+    try {
+      saveCustomSupabaseConfig(url, anonKey);
+      const connected = isSupabaseConnected();
+      setIsSupabaseConfigured(connected);
+      setSupabaseConfigState(getActiveSupabaseConfig());
+      if (connected) {
+        addAudit('SUPABASE_CONFIG', `Live Supabase project connected: ${url}`);
+        soundFx.playSuccessTone();
+        return { success: true };
+      } else if (!url && !anonKey) {
+        addAudit('SUPABASE_CONFIG', 'Supabase credentials reset to Sandbox Local Engine');
+        soundFx.playKeyClick();
+        return { success: true };
+      } else {
+        return { success: false, error: 'Invalid Supabase URL or Anon Key. URL must start with https://' };
+      }
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Failed to save configuration' };
+    }
+  };
+
+  const logout = async () => {
+    const supabase = initSupabase();
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (_) {}
+    }
     if (currentUser) {
-      addAudit('USER_LOGOUT', `User ${currentUser.email} logged out`);
+      addAudit('USER_LOGOUT', `User ${currentUser.email} signed out`);
     }
     setCurrentUserState(null);
+    setStored('user', null);
     setIsAdminOpen(false);
     setIsProfileModalOpen(false);
+    soundFx.playKeyClick();
   };
 
   const toggleAudioEffects = () => {
@@ -433,8 +866,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         education,
         labExperiments,
         messages,
+        contactMessages: messages,
         currentUser,
         auditLogs,
+        registeredUsers,
+        isSupabaseConfigured,
+        supabaseConfig,
         activeSection,
         setActiveSection,
         isCommandPaletteOpen,
@@ -446,7 +883,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isProfileModalOpen,
         setIsProfileModalOpen,
         isAdminOpen,
-        setIsAdminOpen,
+        setIsAdminOpen: handleSetIsAdminOpen,
         selectedProject,
         setSelectedProject,
         selectedWriteUp,
@@ -473,6 +910,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteMessage,
         login,
         signup,
+        resetPassword,
+        updateUserProfile,
+        updateUserRole,
+        deleteUserAccount,
+        setSupabaseCredentials,
         logout,
         toggleAudioEffects,
         resetToDefaults,

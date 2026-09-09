@@ -22,13 +22,15 @@ import { soundFx } from '../utils/audio';
 
 export const WriteUpsSection: React.FC = () => {
   const {
-    writeUps,
+    writeUps = [],
     selectedWriteUp,
     setSelectedWriteUp,
     incrementWriteUpViews,
     currentUser,
     toggleSaveArticle,
   } = useApp();
+
+  const safeArticles = Array.isArray(writeUps) ? writeUps : [];
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -44,7 +46,7 @@ export const WriteUpsSection: React.FC = () => {
     'Defensive Security',
   ];
 
-  const filteredArticles = writeUps.filter((art) => {
+  const filteredArticles = safeArticles.filter((art) => {
     if (!art.published) return false;
     const matchesCat = selectedCategory === 'ALL' || art.category === selectedCategory;
     const matchesSearch =

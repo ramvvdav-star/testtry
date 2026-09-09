@@ -19,9 +19,12 @@ import { SkillCategory, Skill } from '../types';
 import { soundFx } from '../utils/audio';
 
 export const ArsenalSection: React.FC = () => {
-  const { skills, setSelectedProject, projects } = useApp();
+  const { skills = [], setSelectedProject, projects = [] } = useApp();
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const safeSkills = Array.isArray(skills) ? skills : [];
+  const safeProjects = Array.isArray(projects) ? projects : [];
 
   const categories: (string | SkillCategory)[] = [
     'ALL',
@@ -33,7 +36,7 @@ export const ArsenalSection: React.FC = () => {
     'TOOLS',
   ];
 
-  const filteredSkills = skills.filter((skill) => {
+  const filteredSkills = safeSkills.filter((skill) => {
     const matchesCat = activeCategory === 'ALL' || skill.category === activeCategory;
     const matchesQuery =
       skill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

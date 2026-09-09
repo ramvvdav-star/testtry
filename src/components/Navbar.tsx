@@ -192,46 +192,55 @@ export const Navbar: React.FC = () => {
             <span>TERMINAL</span>
           </button>
 
-          {/* User / Admin Action Button */}
+          {/* Always-accessible Admin CMS Button */}
+          <button
+            id="btn-navbar-admin-cms"
+            onClick={() => {
+              soundFx.playKeyClick();
+              setIsAdminOpen(true);
+            }}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-amber-500/40 bg-amber-950/30 text-amber-300 hover:bg-amber-950/60 text-xs font-mono transition-colors shadow-[0_0_10px_rgba(245,158,11,0.15)] cursor-pointer"
+            title="Open Admin CMS Control Center"
+          >
+            <Sliders className="w-3.5 h-3.5 text-amber-400" />
+            <span>ADMIN</span>
+          </button>
+
+          {/* User Profile / Login Action Button */}
           {currentUser ? (
-            <div className="flex items-center gap-1.5">
-              {currentUser.role === 'admin' && (
-                <button
-                  id="btn-navbar-admin-cms"
-                  onClick={() => {
-                    soundFx.playKeyClick();
-                    setIsAdminOpen(true);
-                  }}
-                  className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded border border-amber-500/40 bg-amber-950/30 text-amber-300 hover:bg-amber-950/60 text-xs font-mono transition-colors"
-                  title="Open Admin CMS"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>ADMIN</span>
-                </button>
+            <button
+              id="btn-navbar-profile"
+              onClick={() => {
+                soundFx.playKeyClick();
+                setIsProfileModalOpen(true);
+              }}
+              className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1 rounded border border-zinc-800 hover:border-zinc-700 bg-zinc-900/60 transition-colors"
+              title={`Logged in as ${currentUser.name} (${currentUser.role})`}
+            >
+              {currentUser.avatar ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-5 h-5 rounded-full object-cover border border-emerald-500/50"
+                />
+              ) : (
+                <UserIcon className="w-4 h-4 text-emerald-400" />
               )}
-              <button
-                id="btn-navbar-profile"
-                onClick={() => {
-                  soundFx.playKeyClick();
-                  setIsProfileModalOpen(true);
-                }}
-                className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1 rounded border border-zinc-800 hover:border-zinc-700 bg-zinc-900/60 transition-colors"
-                title={`Logged in as ${currentUser.name} (${currentUser.role})`}
+              <span className="text-xs font-mono text-zinc-300 hidden md:inline-block max-w-[90px] truncate">
+                {currentUser.name}
+              </span>
+              <span
+                className={`text-[9px] font-mono px-1.5 py-0.2 rounded border hidden sm:inline-block ${
+                  currentUser.role === 'admin'
+                    ? 'bg-amber-950/60 text-amber-300 border-amber-500/40'
+                    : currentUser.role === 'analyst'
+                    ? 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40'
+                    : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                }`}
               >
-                {currentUser.avatar ? (
-                  <img
-                    src={currentUser.avatar}
-                    alt={currentUser.name}
-                    className="w-5 h-5 rounded-full object-cover border border-emerald-500/50"
-                  />
-                ) : (
-                  <UserIcon className="w-4 h-4 text-emerald-400" />
-                )}
-                <span className="text-xs font-mono text-zinc-300 hidden md:inline-block max-w-[80px] truncate">
-                  {currentUser.name}
-                </span>
-              </button>
-            </div>
+                {(currentUser.role || 'researcher').toUpperCase()}
+              </span>
+            </button>
           ) : (
             <button
               id="btn-navbar-login"
@@ -302,18 +311,18 @@ export const Navbar: React.FC = () => {
                 LAUNCH TERMINAL
               </button>
 
-              {currentUser?.role === 'admin' && (
-                <button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    setIsAdminOpen(true);
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-amber-500/40 bg-amber-950/20 text-amber-300 text-xs font-mono font-medium"
-                >
-                  <Sliders className="w-4 h-4 text-amber-400" />
-                  ADMIN DASHBOARD
-                </button>
-              )}
+              <button
+                id="btn-mobile-admin-cms"
+                onClick={() => {
+                  soundFx.playKeyClick();
+                  setMobileMenuOpen(false);
+                  setIsAdminOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-amber-500/40 bg-amber-950/30 text-amber-300 text-xs font-mono font-medium shadow-[0_0_10px_rgba(245,158,11,0.15)] cursor-pointer"
+              >
+                <Sliders className="w-4 h-4 text-amber-400" />
+                ADMIN DASHBOARD (CMS)
+              </button>
             </div>
           </div>
 

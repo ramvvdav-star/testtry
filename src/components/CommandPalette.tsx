@@ -161,16 +161,12 @@ export const CommandPalette: React.FC = () => {
     {
       id: 'action-admin',
       type: 'ACTION',
-      title: currentUser?.role === 'admin' ? 'Open Admin CMS' : 'Login as Admin',
-      subtitle: 'Manage projects, write-ups, daily logs, SOC status & database',
+      title: 'Open Admin CMS & Control Center',
+      subtitle: 'Manage projects, write-ups, daily logs, SOC status & database (Ctrl/Cmd+Alt+A)',
       icon: <Sliders className="w-4 h-4 text-amber-400" />,
       action: () => {
         setIsCommandPaletteOpen(false);
-        if (currentUser?.role === 'admin') {
-          setIsAdminOpen(true);
-        } else {
-          setIsAuthModalOpen(true);
-        }
+        setIsAdminOpen(true);
       },
     },
     // Projects

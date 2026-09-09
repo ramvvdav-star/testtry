@@ -17,8 +17,10 @@ import { Project, ProjectCategory, ProjectStatus } from '../types';
 import { soundFx } from '../utils/audio';
 
 export const ProjectsSection: React.FC = () => {
-  const { projects, selectedProject, setSelectedProject } = useApp();
+  const { projects = [], selectedProject, setSelectedProject } = useApp();
   const [activeCategory, setActiveCategory] = useState<ProjectCategory>('ALL');
+
+  const safeProjects = Array.isArray(projects) ? projects : [];
 
   const categories: ProjectCategory[] = [
     'ALL',
@@ -30,7 +32,7 @@ export const ProjectsSection: React.FC = () => {
     'RESEARCH',
   ];
 
-  const filteredProjects = projects.filter((proj) => {
+  const filteredProjects = safeProjects.filter((proj) => {
     if (activeCategory === 'ALL') return true;
     return proj.category === activeCategory;
   });

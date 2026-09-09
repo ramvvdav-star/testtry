@@ -22,7 +22,8 @@ import { LabExperiment } from '../types';
 import { soundFx } from '../utils/audio';
 
 export const SecurityLabSection: React.FC = () => {
-  const { liveStatus, labExperiments, setIsTerminalOpen } = useApp();
+  const { liveStatus, labExperiments = [], setIsTerminalOpen } = useApp();
+  const safeLabExperiments = Array.isArray(labExperiments) ? labExperiments : [];
   const [activeTab, setActiveTab] = useState<'EXPERIMENTS' | 'HEADER_AUDIT' | 'HASH_INSPECTOR' | 'CIDR_CALC' | 'JWT_PARSER'>('EXPERIMENTS');
 
   // --- Interactive Tool 1: HTTP Security Header Auditor State ---
@@ -289,7 +290,7 @@ export const SecurityLabSection: React.FC = () => {
               : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          EXPERIMENT DOSSIERS ({labExperiments.length})
+          EXPERIMENT DOSSIERS ({safeLabExperiments.length})
         </button>
 
         <button
@@ -341,7 +342,7 @@ export const SecurityLabSection: React.FC = () => {
       {/* Tab 1: Experiment Dossiers */}
       {activeTab === 'EXPERIMENTS' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {labExperiments.map((exp) => (
+          {safeLabExperiments.map((exp) => (
             <div
               key={exp.id}
               className="rounded-xl border border-zinc-800/80 bg-[#090d16]/80 p-6 space-y-4 hover:border-zinc-700 transition-all"

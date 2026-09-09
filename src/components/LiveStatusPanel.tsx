@@ -62,20 +62,18 @@ export const LiveStatusPanel: React.FC = () => {
                 <span>UPTIME:</span>
                 <span className="text-zinc-200">{liveStatus.uptime}</span>
               </div>
-              {currentUser?.role === 'admin' && (
-                <button
-                  id="btn-edit-soc-status"
-                  onClick={() => {
-                    soundFx.playKeyClick();
-                    setIsAdminOpen(true);
-                  }}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/40 bg-amber-950/20 text-amber-400 text-[11px] hover:bg-amber-950/50 transition-colors"
-                  title="Configure SOC metrics in Admin Dashboard"
-                >
-                  <Sliders className="w-3 h-3" />
-                  <span>EDIT STATUS</span>
-                </button>
-              )}
+              <button
+                id="btn-edit-soc-status"
+                onClick={() => {
+                  soundFx.playKeyClick();
+                  setIsAdminOpen(true);
+                }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/40 bg-amber-950/30 text-amber-300 text-[11px] hover:bg-amber-950/60 transition-colors cursor-pointer"
+                title="Configure SOC metrics & live telemetry in Admin Dashboard"
+              >
+                <Sliders className="w-3 h-3 text-amber-400" />
+                <span>EDIT SOC STATUS</span>
+              </button>
             </div>
           </div>
 

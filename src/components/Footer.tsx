@@ -151,18 +151,15 @@ export const Footer: React.FC = () => {
 
             <div className="pt-2">
               <button
+                id="btn-footer-admin-cms"
                 onClick={() => {
                   soundFx.playKeyClick();
-                  if (currentUser?.role === 'admin') {
-                    setIsAdminOpen(true);
-                  } else {
-                    setIsAuthModalOpen(true);
-                  }
+                  setIsAdminOpen(true);
                 }}
-                className="w-full py-2 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                className="w-full py-2 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-amber-500/30 hover:border-amber-500/60 text-amber-300 text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                <span>{currentUser?.role === 'admin' ? 'CMS DASHBOARD' : 'OPERATOR LOGIN'}</span>
+                <span>ADMIN CMS & CONTROL CENTER</span>
               </button>
             </div>
           </div>

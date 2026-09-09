@@ -12,30 +12,34 @@ import {
 import { useApp } from '../context/AppContext';
 
 export const PersonalMetrics: React.FC = () => {
-  const { metrics, projects, writeUps, skills } = useApp();
+  const { metrics, projects = [], writeUps = [], skills = [] } = useApp();
+
+  const safeProjects = Array.isArray(projects) ? projects : [];
+  const safeWriteUps = Array.isArray(writeUps) ? writeUps : [];
+  const safeSkills = Array.isArray(skills) ? skills : [];
 
   // Truthful metrics derived from actual system state or admin configuration
   const metricCards = [
     {
       id: 'metric-projects',
       label: 'Security Projects',
-      value: metrics.securityProjects > 0 ? `${metrics.securityProjects}` : 'Building',
-      sublabel: `${projects.filter((p) => p.status === 'ACTIVE').length} active repositories`,
+      value: metrics?.securityProjects && metrics.securityProjects > 0 ? `${metrics.securityProjects}` : 'Building',
+      sublabel: `${safeProjects.filter((p) => p.status === 'ACTIVE').length} active repositories`,
       icon: <FolderGit2 className="w-5 h-5 text-emerald-400" />,
       accent: 'border-emerald-500/30 bg-emerald-950/10',
     },
     {
       id: 'metric-writeups',
       label: 'Research Write-ups',
-      value: metrics.writeups > 0 ? `${metrics.writeups}` : 'Building',
-      sublabel: `${writeUps.filter((w) => w.published).length} published teardowns`,
+      value: metrics?.writeups && metrics.writeups > 0 ? `${metrics.writeups}` : 'Building',
+      sublabel: `${safeWriteUps.filter((w) => w.published).length} published teardowns`,
       icon: <BookOpen className="w-5 h-5 text-cyan-400" />,
       accent: 'border-cyan-500/30 bg-cyan-950/10',
     },
     {
       id: 'metric-labhours',
       label: 'Lab & Research Hours',
-      value: metrics.labHours > 0 ? `${metrics.labHours}+` : 'Building',
+      value: metrics?.labHours && metrics.labHours > 0 ? `${metrics.labHours}+` : 'Building',
       sublabel: 'Dedicated security sandbox hours',
       icon: <Clock className="w-5 h-5 text-amber-400" />,
       accent: 'border-amber-500/30 bg-amber-950/10',
@@ -43,8 +47,8 @@ export const PersonalMetrics: React.FC = () => {
     {
       id: 'metric-tools',
       label: 'Arsenal Tools & Skills',
-      value: metrics.tools > 0 ? `${metrics.tools}` : 'Building',
-      sublabel: `${skills.length} profiled in matrix`,
+      value: metrics?.tools && metrics.tools > 0 ? `${metrics.tools}` : 'Building',
+      sublabel: `${safeSkills.length} profiled in matrix`,
       icon: <Wrench className="w-5 h-5 text-purple-400" />,
       accent: 'border-purple-500/30 bg-purple-950/10',
     },

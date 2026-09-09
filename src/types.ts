@@ -150,15 +150,19 @@ export interface Message {
   read: boolean;
 }
 
+export type UserRole = 'admin' | 'researcher' | 'analyst' | 'guest';
+
 export interface User {
   id: string;
   name: string;
   username?: string;
   email: string;
-  role: 'admin' | 'researcher' | 'guest';
+  role: UserRole;
   avatar?: string;
   joinedDate: string;
   savedArticles: string[]; // writeUp IDs
+  lastLogin?: string;
+  provider?: 'supabase' | 'local';
 }
 
 export interface AuditLog {
