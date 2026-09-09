@@ -1,0 +1,6 @@
+{
+  "name": "RAM.SEC | Cybersecurity Portfolio & Personal Security Lab",
+  "description": "Ram breaks things to keep them safe. Elite cybersecurity portfolio, personal SOC dashboard, security research write-ups, arsenal, and interactive lab.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
